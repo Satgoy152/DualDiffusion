@@ -8,7 +8,6 @@ It contains everything except the weights and tokenizer, which are pulled in fro
 
 All steps are laid out in the jupyter notebook, make sure the folder containing FastDLLM is in the same directory as where it is being used, or make sure to modify the path to reflect any changes.
 
-
 Reference:
 
 @misc{wu2025fastdllmv2efficientblockdiffusion,
