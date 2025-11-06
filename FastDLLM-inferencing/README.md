@@ -2,7 +2,7 @@
 
 The FastDLLM-7B folder is a copy of this [FastDLLM model](https://huggingface.co/Efficient-Large-Model/Fast_dLLM_v2_7B) from HuggingFace (paper referenced below).
 
-It contains everything except the weights and tokenizer, which are pulled in from HuggingFace to avoid storage issues
+It contains everything except the weights and tokenizer, which are pulled in from HuggingFace to avoid storage issues.
 
 ## How to Use
 
