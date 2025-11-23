@@ -665,18 +665,20 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
         steps=None,
         **kwargs
     ):
+        # Allowing users to pass in past_key_values and block_past_key_values for advanced use cases
+        past_key_values = kwargs.pop("past_key_values", None)
+        block_past_key_values = kwargs.pop("block_past_key_values", None)
+        
         num_blocks = max_new_tokens // block_size
         original_input_length = input_ids.shape[1]
         step_count = 0
 
         if input_ids.shape[1] > block_size:
-            output = self.forward(input_ids=input_ids[:, :(input_ids.shape[1] // block_size * block_size)], use_cache=True, update_past_key_values=True, block_size=block_size)
+            output = self.forward(input_ids=input_ids[:, :(input_ids.shape[1] // block_size * block_size)], use_cache=True, update_past_key_values=True, block_size=block_size, past_key_values=past_key_values)
             logits, past_key_values = output.logits, output.past_key_values
             if input_ids.shape[1] % block_size == 0:
                 next_token = logits[:, -1:, :].argmax(dim=-1)
                 input_ids = torch.cat([input_ids, next_token], dim=1)
-        else:
-            past_key_values = None
 
         num_small_blocks = block_size // small_block_size
 
@@ -689,7 +691,6 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
             x_init = torch.cat([input_ids, x_init], dim=1)
 
             x_t = x_init.clone()
-            block_past_key_values = None
             while True:
                 if steps != None and step_count >= steps:
                     break
@@ -758,7 +759,7 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
         if stop_token in input_ids[:, original_input_length:]:
             stop_token_idx = (input_ids[:, original_input_length:] == stop_token).nonzero()[0][1]
             input_ids = input_ids[:, :stop_token_idx+original_input_length+1]
-        return input_ids
+        return input_ids, past_key_values, block_past_key_values
 
     def sample_with_top_p(self, logits, top_p=0.95, temperature=1.0):
         # Calculate probabilities
