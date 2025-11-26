@@ -667,9 +667,6 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
     ):
         past_key_values = kwargs.pop("past_key_values", None)
         block_past_key_values = kwargs.pop("block_past_key_values", None)
-        # Allowing users to pass in past_key_values and block_past_key_values for advanced use cases
-        past_key_values = kwargs.pop("past_key_values", None)
-        block_past_key_values = kwargs.pop("block_past_key_values", None)
         
         num_blocks = max_new_tokens // block_size
         original_input_length = input_ids.shape[1]
@@ -793,7 +790,6 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
         if stop_token in input_ids[:, original_input_length:]:
             stop_token_idx = (input_ids[:, original_input_length:] == stop_token).nonzero()[0][1]
             input_ids = input_ids[:, :stop_token_idx+original_input_length+1]
-        return input_ids, past_key_values, block_past_key_values
         return input_ids, past_key_values, block_past_key_values
 
     def sample_with_top_p(self, logits, top_p=0.95, temperature=1.0):
