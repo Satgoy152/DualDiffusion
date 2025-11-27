@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "accelerate>=1.12.0",
+    "einops>=0.8.1",
     "ipykernel>=7.1.0",
     "pyyaml>=6.0.3",
     "torch>=2.9.0",
