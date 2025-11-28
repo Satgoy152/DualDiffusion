@@ -116,48 +116,48 @@ def generate(model, prompt, steps=128, gen_length=128, block_length=128, tempera
             top10_probs, top10_indices = torch.topk(probs, k=10, dim=-1)  # Both: (seq_len, 10)
 
             # # Create Nx10x2 tensor: [token_id, probability]
-            N = probs.shape[0]
-            top10_table = torch.zeros(N, 10, 2)
-            top10_table[:, :, 0] = top10_indices.float()  # Token IDs
-            top10_table[:, :, 1] = top10_probs  # Probabilities
+            # N = probs.shape[0]
+            # top10_table = torch.zeros(N, 10, 2)
+            # top10_table[:, :, 0] = top10_indices.float()  # Token IDs
+            # top10_table[:, :, 1] = top10_probs  # Probabilities
             
             # # Print table for each position
-            print(f"\nTop-10 tokens per position at step {i}:")
-            pos = 133
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
-            pos = pos + 1
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
-            pos = pos + 1
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
+            # print(f"\nTop-10 tokens per position at step {i}:")
+            # pos = 133
+            # # Only show masked positions to reduce clutter
+            # print(f"\nPosition {pos}:")
+            # print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
+            # print(f"  {'-'*48}")
+            # for rank in range(10):
+            #     token_id = int(top10_table[pos, rank, 0].item())
+            #     prob = top10_table[pos, rank, 1].item()
+            #     token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
+            #     selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
+            #     print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
+            # pos = pos + 1
+            # # Only show masked positions to reduce clutter
+            # print(f"\nPosition {pos}:")
+            # print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
+            # print(f"  {'-'*48}")
+            # for rank in range(10):
+            #     token_id = int(top10_table[pos, rank, 0].item())
+            #     prob = top10_table[pos, rank, 1].item()
+            #     token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
+            #     selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
+            #     print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
+            # pos = pos + 1
+            # # Only show masked positions to reduce clutter
+            # print(f"\nPosition {pos}:")
+            # print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
+            # print(f"  {'-'*48}")
+            # for rank in range(10):
+            #     token_id = int(top10_table[pos, rank, 0].item())
+            #     prob = top10_table[pos, rank, 1].item()
+            #     token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
+            #     selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
+            #     print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
 
-            print(f"{'='*80}\n")
+            # print(f"{'='*80}\n")
 
             if remasking == 'low_confidence':
                 p = F.softmax(logits, dim=-1)
@@ -191,7 +191,7 @@ def generate(model, prompt, steps=128, gen_length=128, block_length=128, tempera
             # print(f"STEP {i} - Block {num_block}")
             # print(f"{'='*80}")
             # print("Predicted tokens (before remasking):")
-            print(predicted_tokens[prompt.shape[1]:])
+            # print(predicted_tokens[prompt.shape[1]:])
 
     return x
 
@@ -220,7 +220,7 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
 
     set_seed(42)
 
-    tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)
+    # tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)
 
 
     prompt_index = (x != mask_id) # array of which indexes are from prompt
@@ -252,54 +252,6 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
             logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
             x0 = torch.argmax(logits_with_noise, dim=-1) # b, l
 
-
-            probs = F.softmax(logits[0], dim=-1)  # Shape: (seq_len, vocab_size)
-            top10_probs, top10_indices = torch.topk(probs, k=10, dim=-1)  # Both: (seq_len, 10)
-
-            # # Create Nx10x2 tensor: [token_id, probability]
-            N = probs.shape[0]
-            top10_table = torch.zeros(N, 10, 2)
-            top10_table[:, :, 0] = top10_indices.float()  # Token IDs
-            top10_table[:, :, 1] = top10_probs  # Probabilities
-
-            # # Print table for each position
-            print(f"\nTop-10 tokens per position at step {i}:")
-            pos = 133
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
-            pos = pos + 1
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
-            pos = pos + 1
-            # Only show masked positions to reduce clutter
-            print(f"\nPosition {pos}:")
-            print(f"  {'Rank':<6} {'Token':<30} {'Probability':<12}")
-            print(f"  {'-'*48}")
-            for rank in range(10):
-                token_id = int(top10_table[pos, rank, 0].item())
-                prob = top10_table[pos, rank, 1].item()
-                token_str = tokenizer.decode([token_id]).replace('\n', '\\n')
-                selected = "◄ SELECTED" if token_id == x0[0, pos].item() else ""
-                print(f"  {rank+1:<6} {token_str:<30} {prob:<12.6f} {selected}")
-
-            print(f"{'='*80}\n")
-
             if remasking == 'low_confidence':
                 p = F.softmax(logits, dim=-1)
                 x0_p = torch.squeeze(
@@ -324,8 +276,8 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
                     transfer_index[j, select_index] = True
             x[transfer_index] = x0[transfer_index] # unmask selected tokens
 
-            predicted_tokens = [tokenizer.decode([token_id.item()]) for token_id in x[0]]
-            print(predicted_tokens[prompt.shape[1]:])
+            # predicted_tokens = [tokenizer.decode([token_id.item()]) for token_id in x[0]]
+            # print(predicted_tokens[prompt.shape[1]:])
 
     return x
 
