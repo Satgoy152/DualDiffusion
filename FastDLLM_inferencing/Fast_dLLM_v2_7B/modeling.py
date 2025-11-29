@@ -673,7 +673,7 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
         original_input_length = input_ids.shape[1]
         step_count = 0
 
-        if input_ids.shape[1] > block_size:
+        if past_key_values is None and input_ids.shape[1] > block_size:
             output = self.forward(input_ids=input_ids[:, :(input_ids.shape[1] // block_size * block_size)], use_cache=True, update_past_key_values=True, block_size=block_size, past_key_values=past_key_values)
             logits, past_key_values = output.logits, output.past_key_values
             if input_ids.shape[1] % block_size == 0:

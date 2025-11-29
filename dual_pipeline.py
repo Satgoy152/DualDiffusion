@@ -115,19 +115,24 @@ def dual_diffusion_generate(
     print(decoded_full)
     print("###############################################")
     current_state = initial_input
+    input_len = initial_input[0].size(0)
     
     # 2. Main iteration loop
     for iteration in range(max_iterations):
         stats['iterations'] = iteration + 1
+
+        new_tokens = max_new_tokens - (current_state[0].size(0) - input_len)
         
         # 2a. Drafter phase
-        drafter_output = run_drafter_phase(
+        drafter_output, drafter_kv_cache, drafter_block_cache = run_drafter_phase(
             drafter_model,
             drafter_tokenizer,
             current_state,
             num_drafter_steps,
+            new_tokens,
             drafter_mask_id,
             drafter_generate_fn,
+            threshold=0.95,
             **kwargs
         )
         stats['total_drafter_steps'] += num_drafter_steps
@@ -238,24 +243,27 @@ def prepare_masked_query(
         Tensor of shape (1, prompt_len + max_new_tokens) with masked generation area
     """
     # apply chat tempelate
-    messages = [{"role": "user", "content": query}]
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": query},
+    ]
     formatted_prompt = tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=False
         )
     # Tokenize the prompt
-    prompt_ids = tokenizer(formatted_prompt)['input_ids']
-    prompt_tensor = torch.tensor(prompt_ids, dtype=torch.long).unsqueeze(0).to(device)
+    prompt_ids = tokenizer([text], return_tensors="pt").to(model.device)
     
     # Create full sequence: prompt + masked tokens
-    full_length = len(prompt_ids) + max_new_tokens
-    masked_sequence = torch.full((1, full_length), mask_id, dtype=torch.long, device=device)
+    # Drafter shouldn't take in a full set of masks - adds them on in the generate function
+    # full_length = len(prompt_ids) + max_new_tokens
+    # masked_sequence = torch.full((1, full_length), mask_id, dtype=torch.long, device=device)
     
     # Copy prompt to beginning
-    masked_sequence[0, :len(prompt_ids)] = prompt_tensor
+    # masked_sequence[0, :len(prompt_ids)] = prompt_tensor
     
-    return masked_sequence
+    return prompt_ids["input_ids"]
 
 
 def run_drafter_phase(
@@ -263,8 +271,10 @@ def run_drafter_phase(
     tokenizer,
     input_ids: torch.Tensor,
     num_steps: int,
+    max_new_tokens,
     mask_id: int,
     generate_fn: Optional[Callable] = None,
+    threshold=0.95
     **kwargs
 ) -> torch.Tensor:
     """
@@ -284,19 +294,25 @@ def run_drafter_phase(
     """
     if generate_fn is not None:
         # Use custom generation function
-        return generate_fn(model, tokenizer, input_ids, num_steps, **kwargs)
+        return generate_fn(
+            model, 
+            tokenizer, 
+            input_ids, 
+            num_steps, 
+            **kwargs)
     else:
         # Default: assume model has .generate() method
-        # This is a placeholder - you'll need to adapt to your model's API
+        # Adapted to fit FastDLLM custom generation function
         output = model.generate(
             input_ids,
             tokenizer=tokenizer,
+            threshold=threshold,
             steps=num_steps,
+            max_new_tokens=max_new_tokens,
             **kwargs
         )
         # Handle different return types (some models return tuples)
-        if isinstance(output, tuple):
-            return output[0]
+        # For Fast DLLM - this is a tuple of 3 (output_ids, kv_cache, block_kv_cache)
         return output
 
 
