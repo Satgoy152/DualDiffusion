@@ -1,0 +1,14 @@
+{
+  "experiment_name": "MMLU Evaluation",
+  "model_path": "/path/to/your/model",
+  "inherits": "default.json",
+  "datasets": {
+    "mmlu": "datasets.mmlu.run_mmlu"
+  },
+  "metrics": {
+    "speed_efficiency": {
+      "batch_sizes": [1, 8]
+    }
+  },
+  "seeds": [42]
+}

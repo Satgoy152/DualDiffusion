@@ -1,0 +1,24 @@
+========================================
+REPRODUCIBILITY REPORT
+========================================
+
+[Configuration]
+  - experiment_name: GSM8K Evaluation
+  - model_path: /path/to/your/model
+  - inherits: default.json
+  - datasets: {'gsm8k': 'datasets.gsm8k.run_gsm8k'}
+  - metrics: {'speed_efficiency': {'batch_sizes': [1, 8]}}
+  - seeds: [42]
+  - config_file: configs/experiment1_gsm8k.json
+
+[System & Environment]
+  - python_version: 3.11.11 (main, Dec  9 2024, 15:32:27) [GCC 8.5.0 20210514 (Red Hat 8.5.0-22)]
+  - platform: Linux-4.18.0-553.50.1.el8_10.x86_64-x86_64-with-glibc2.28
+  - hardware: x86_64
+
+[Results Summary]
+  - mean_gsm8k_accuracy: 0.750
+
+[Notes]
+  - This report contains the key details to reproduce the experiment.
+  - For full details, refer to the saved artifacts (configs, results.json).

@@ -1,0 +1,34 @@
+{
+  "experiment_name": "Default Evaluation Run",
+  "model_path": "/path/to/default/model",
+  "generate_function": "generate.generate",
+  "datasets": {
+    "gsm8k": "datasets.gsm8k.run_gsm8k",
+    "mmlu": "datasets.mmlu.run_mmlu",
+    "arc_challenge": "datasets.arc_challenge.run_arc_challenge"
+  },
+  "metrics": {
+    "speed_efficiency": {
+      "batch_sizes": [1, 8, 32]
+    },
+    "diversity": {
+      "n_values": [2, 3]
+    }
+  },
+  "baselines": {
+    "autoregressive": {
+      "param_grid": {
+        "top_k": [40, 100],
+        "top_p": [0.9, 0.95],
+        "temperature": [0.8, 1.0, 1.2]
+      }
+    },
+    "diffusion": {
+      "param_grid": {
+        "sampler": ["DDIM", "DDPM"],
+        "steps": [10, 25, 50, 100]
+      }
+    }
+  },
+  "seeds": [42, 123, 456]
+}

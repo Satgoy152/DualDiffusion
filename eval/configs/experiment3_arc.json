@@ -1,0 +1,14 @@
+{
+  "experiment_name": "ARC-Challenge Evaluation",
+  "model_path": "/path/to/your/model",
+  "inherits": "default.json",
+  "datasets": {
+    "arc_challenge": "datasets.arc_challenge.run_arc_challenge"
+  },
+  "metrics": {
+    "speed_efficiency": {
+      "batch_sizes": [1, 8]
+    }
+  },
+  "seeds": [42]
+}
