@@ -232,6 +232,8 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
     assert n % num_blocks == 0
     steps_per_block = n // num_blocks # steps per block
 
+    all_logits = []
+
     for num_block in range(num_blocks):
         block_mask_index = (x[:, prompt.shape[1] + num_block * block_length: prompt.shape[1] + (num_block + 1) * block_length:] == mask_id) # get current block
 
@@ -248,6 +250,12 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
                 out = model(x, output_hidden_states=True)
                 logits = out.logits
                 hidden_states = out.hidden_states
+
+            # Store logits for the generated part
+            # logits shape: (batch, seq_len, vocab)
+            # We want (generation_length, vocab) for this step (assuming batch=1)
+            gen_logits = logits[:, prompt.shape[1]:, :]
+            all_logits.append(gen_logits)
 
             logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
             x0 = torch.argmax(logits_with_noise, dim=-1) # b, l
@@ -279,7 +287,8 @@ def generate_per_step(model, prompt, n, k, gen_length=128, block_length=128, tem
             # predicted_tokens = [tokenizer.decode([token_id.item()]) for token_id in x[0]]
             # print(predicted_tokens[prompt.shape[1]:])
 
-    return x
+    stacked_logits = torch.cat(all_logits, dim=0) # (steps, gen_len, vocab)
+    return x, stacked_logits
 
 
 def main():
