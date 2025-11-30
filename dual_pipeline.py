@@ -118,30 +118,69 @@ def dual_diffusion_generate(
     print("Full decoded base prompt (with special tokens):")
     print(decoded_full)
     print("###############################################")
-    current_state = initial_input
+    
+    # Start with just the prompt for the first generation
+    current_state = initial_input[:, :drafter_prompt_len]
+    drafter_past_key_values = None
     
     # 2. Main iteration loop
     for iteration in range(max_iterations):
         stats['iterations'] = iteration + 1
         
         # 2a. Drafter phase
-        drafter_output, drafter_kv_cache, drafter_block_cache = run_drafter_phase(
+        # If this is a re-run (iteration > 0), we need to handle truncation based on masks
+        if iteration > 0:
+            # Find the first mask token in the current state (which comes from verification)
+            mask_indices = (current_state == drafter_mask_id).nonzero(as_tuple=True)
+            
+            if len(mask_indices[0]) > 0:
+                # Get the index of the first mask in the sequence
+                # Assuming batch size 1
+                first_mask_idx = mask_indices[1].min().item()
+                
+                # Truncate input_ids to the point before the first mask
+                current_state = current_state[:, :first_mask_idx]
+                
+                # Truncate KV cache to match the new sequence length
+                new_seq_len = current_state.size(1)
+                drafter_past_key_values = truncate_dynamic_cache(drafter_past_key_values, new_seq_len)
+                
+                print(f"Iteration {iteration}: Truncated to length {new_seq_len} due to masks.")
+            else:
+                print(f"Iteration {iteration}: No masks found, skipping truncation.")
+
+        # Calculate how many tokens we still need to generate
+        current_len = current_state.size(1)
+        target_len = drafter_prompt_len + max_new_tokens
+        tokens_to_generate = target_len - current_len
+        
+        if tokens_to_generate <= 0:
+            print("Target length reached.")
+            break
+
+        drafter_output, drafter_kv_cache, _ = run_drafter_phase(
             drafter_model,
             drafter_tokenizer,
             current_state,
             num_drafter_steps,
-            max_new_tokens,
+            tokens_to_generate,
             drafter_mask_id,
             drafter_generate_fn,
             threshold=0.95,
+            past_key_values=drafter_past_key_values,
             **kwargs
         )
         stats['total_drafter_steps'] += num_drafter_steps
+        
+        # Update state and cache
+        current_state = drafter_output
+        drafter_past_key_values = drafter_kv_cache
 
         decoded_full = drafter_tokenizer.decode(drafter_output[0], skip_special_tokens=False)
         print(f"Full decoded for drafter step {stats['total_drafter_steps']} (with special tokens):")
         print(decoded_full)
         print("###############################################")
+        
         
         # 2b. Convert to verifier vocabulary
         # Extract generated part (skip prompt)
@@ -390,5 +429,16 @@ def run_verifier_phase(
         if isinstance(output, tuple):
             return output[0]
         return output
+    
+def truncate_dynamic_cache(dynamic_cache, new_len):
+    """
+    Truncates a HuggingFace DynamicCache to match a shortened sequence length.
+    """
+    for i in range(len(dynamic_cache)):
+        if dynamic_cache.layers[i].keys is not None:
+            dynamic_cache.layers[i].keys = dynamic_cache.layers[i].keys[:, :, :new_len, :].contiguous()
+        if dynamic_cache.layers[i].values is not None:
+            dynamic_cache.layers[i].values = dynamic_cache.layers[i].values[:, :, :new_len, :].contiguous()
+    return dynamic_cache
 
         
