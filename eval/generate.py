@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoConfig, GenerationConfig
 # Fix import paths for FastDLLM
 # ---------------------------------------------------------
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-fastdllm_path = os.path.join(repo_root, "FastDLLM-inferencing")
+fastdllm_path = os.path.join(repo_root, "FastDLLM_inferencing")
 sys.path.insert(0, repo_root)
 sys.path.insert(0, fastdllm_path)
 
@@ -96,8 +96,8 @@ class ModelWrapper:
         """
 
         # Convert eval params → model parameters
-        steps = params.get("steps", 8)
-        max_new_tokens = params.get("max_new_tokens", 32)
+        steps = params.get("steps", 256)
+        max_new_tokens = params.get("max_new_tokens", 1024)
 
         print(f"[ModelWrapper] Generating: steps={steps}, max_new_tokens={max_new_tokens}")
 
@@ -106,13 +106,13 @@ class ModelWrapper:
 
         # Generate
         with torch.inference_mode():
-            gen_ids = self.model.generate(
+            gen_ids, past_key_values, past_block_key_values = self.model.generate(
                 inputs["input_ids"],
                 tokenizer=self.tokenizer,
                 max_new_tokens=max_new_tokens,
                 small_block_size=8,
                 threshold=0.95,
-                steps=steps       # <<<<<< key parameter
+                steps=steps
             )
 
         # Decode only the new tokens

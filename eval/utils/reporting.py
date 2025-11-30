@@ -24,7 +24,7 @@ def generate_reproducibility_report(config, hardware_info, results_summary):
     Args:
         config: The configuration dictionary for the run.
         hardware_info: A dictionary from get_system_info().
-        results_summary: A high-level summary of the results.
+        results_summary: A high-level summary of the results, possibly containing a list of runs.
     """
     report = []
     report.append("="*40)
@@ -40,8 +40,14 @@ def generate_reproducibility_report(config, hardware_info, results_summary):
         report.append(f"  - {key}: {value}")
         
     report.append("\n[Results Summary]")
-    for key, value in results_summary.items():
-        report.append(f"  - {key}: {value}")
+    if "all_runs" in results_summary and isinstance(results_summary["all_runs"], list):
+        for i, run_results in enumerate(results_summary["all_runs"]):
+            report.append(f"\n--- Run {i+1} ---")
+            for key, value in run_results.items():
+                report.append(f"  - {key}: {value}")
+    else:
+        for key, value in results_summary.items():
+            report.append(f"  - {key}: {value}")
         
     report.append("\n[Notes]")
     report.append("  - This report contains the key details to reproduce the experiment.")
@@ -57,24 +63,50 @@ def generate_reproducibility_report(config, hardware_info, results_summary):
     
     return full_report
 
-def print_summary_for_readme(config, main_results):
+def print_summary_for_readme(config, main_results_list):
     """
-    Prints a markdown-formatted summary suitable for a README.
+    Prints a markdown-formatted summary suitable for a README, handling
+    a list of results from multiple parameter runs.
     """
     
     summary = []
-    summary.append(f"# Experiment: {config.get('experiment_name', 'N/A')}")
-    summary.append(f"**Date:** {platform.uname().version.split(' ')[-2]}")
-    summary.append(f"**Model:** {config.get('model_path', 'N/A')}")
+    summary.append(f"## Experiment: {config.get('experiment_name', 'N/A')}")
+    summary.append(f"**Model:** `{config.get('model_path', 'N/A')}`")
     
-    summary.append("\n## Key Results")
-    # This is a simple example; you'd format your main_results dict nicely
-    for key, val in main_results.items():
-        summary.append(f"- **{key}**: {val}")
+    summary.append("\n### Key Results")
+
+    if not isinstance(main_results_list, list):
+        main_results_list = [main_results_list]
+
+    for i, main_results in enumerate(main_results_list):
+        summary.append(f"\n#### Run {i+1}")
         
-    summary.append("\n## How to Run")
+        run_params = main_results.get("run_parameters")
+        if run_params:
+            params_str = ", ".join([f"`{k}={v}`" for k, v in run_params.items()])
+            summary.append(f"**Parameters:** {params_str}")
+
+        for key, val in main_results.items():
+            if key == "run_parameters":
+                continue
+            if isinstance(val, dict):
+                summary.append(f"- **{key}**:")
+                for sub_key, sub_val in val.items():
+                    if isinstance(sub_val, dict):
+                        summary.append(f"  - `{sub_key}`:")
+                        for ssub_key, ssub_val in sub_val.items():
+                            formatted_val = f"{ssub_val:.4f}" if isinstance(ssub_val, float) else ssub_val
+                            summary.append(f"    - `{ssub_key}`: {formatted_val}")
+                    else:
+                        formatted_val = f"{sub_val:.4f}" if isinstance(sub_val, float) else sub_val
+                        summary.append(f"  - `{sub_key}`: {formatted_val}")
+            else:
+                formatted_val = f"{val:.4f}" if isinstance(val, float) else val
+                summary.append(f"- **{key}**: {formatted_val}")
+        
+    summary.append("\n### How to Run")
     summary.append("```bash")
-    summary.append(f"python main.py --config {config.get('config_file', 'path/to/your.json')}")
+    summary.append(f"python eval/main.py --config {config.get('config_file', 'path/to/your.json')}")
     summary.append("```")
 
     print("\n--- README Summary ---")

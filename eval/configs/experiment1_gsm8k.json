@@ -7,7 +7,7 @@
   },
   "metrics": {
     "speed_efficiency": {
-      "batch_sizes": [1, 8]
+      "batch_sizes": [8]
     }
   },
   "seeds": [42]

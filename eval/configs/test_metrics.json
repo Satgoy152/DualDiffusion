@@ -1,0 +1,25 @@
+{
+  "experiment_name": "Test All Metrics",
+  "model_path": "Efficient-Large-Model/Fast_dLLM_7B",
+  "inherits": "default.json",
+  "datasets": {
+    "gsm8k": "dataset_suite.gsm8k.run_gsm8k"
+  },
+  "metrics": {
+    "speed_efficiency": {
+      "batch_sizes": [1]
+    },
+    "diversity": {
+      "n_values": [2],
+      "num_samples_to_generate": 5
+    }
+  },
+  "baselines": {
+    "diffusion": {
+      "param_grid": {
+        "steps": [10, 20]
+      }
+    }
+  },
+  "seeds": [42]
+}
