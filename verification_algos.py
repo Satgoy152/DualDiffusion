@@ -58,6 +58,7 @@ def confidence_threshold_verification(
     drafter_logits: Optional[torch.Tensor] = None,
     verifier_logits: Optional[torch.Tensor] = None,
     threshold: float = 0.9,
+    raw_verifier_output: Optional[torch.Tensor] = None,
     **kwargs
 ) -> Tuple[torch.Tensor, Set[int]]:
     """
@@ -72,6 +73,7 @@ def confidence_threshold_verification(
         drafter_logits: Logits from drafter (if available)
         verifier_logits: Logits from verifier (if available)
         threshold: Confidence threshold for accepting tokens
+        raw_verifier_output: Original output from verifier (in verifier vocab)
 
     Returns:
         (verified_tensor, indices_to_remask)
@@ -80,22 +82,52 @@ def confidence_threshold_verification(
     indices_to_remask = set()
 
     if verifier_logits is not None:
+        # Handle steps dimension in logits
+        if verifier_logits.dim() == 3:
+            # (steps, len, vocab) -> take last step
+            current_logits = verifier_logits[-1]
+        else:
+            current_logits = verifier_logits
+
+        # Use raw output for indexing logits if available
+        target_output = raw_verifier_output if raw_verifier_output is not None else verifier_output
+        
+        # Align lengths: logits might be just generated part
+        # target_output is (1, seq_len)
+        if current_logits.size(0) < target_output.size(1):
+            # Assume logits correspond to the end of target_output
+            offset = target_output.size(1) - current_logits.size(0)
+            target_tokens = target_output[0, offset:]
+        else:
+            offset = 0
+            target_tokens = target_output[0]
+
         # Calculate confidence (max probability) for each position
-        probs = F.softmax(verifier_logits, dim=-1)
+        probs = F.softmax(current_logits, dim=-1)
 
         # Get confidence for the selected tokens
         selected_token_probs = torch.gather(
             probs,
             dim=-1,
-            index=verifier_output.unsqueeze(-1)
-        ).squeeze(-1)  # Shape: (batch, seq_len)
+            index=target_tokens.unsqueeze(-1)
+        ).squeeze(-1)  # Shape: (seq_len)
 
         # Find positions with low confidence
-        verifier_unmasked = (verifier_output != verifier_mask_id)
-        low_confidence = (selected_token_probs < threshold) & verifier_unmasked
+        # Note: we check against mask id of the target output's vocabulary
+        # If using raw_verifier_output, use verifier_mask_id
+        # If using verifier_output (converted), use drafter_mask_id (since it's in drafter vocab)
+        current_mask_id = verifier_mask_id if raw_verifier_output is not None else drafter_mask_id
+        
+        target_unmasked = (target_tokens != current_mask_id)
+        low_confidence = (selected_token_probs < threshold) & target_unmasked
 
         # Mark these for remasking
-        indices_to_remask = set(torch.where(low_confidence[0])[0].tolist())
+        # Note: These indices are relative to target_output (and potentially offset)
+        # If target_output is raw_verifier_output, these indices are for the raw output.
+        # Mapping them back to 'verified' (converted output) is not handled here.
+        # This assumes 1-to-1 mapping or that the caller handles it.
+        indices = torch.where(low_confidence)[0] + offset
+        indices_to_remask = set(indices.tolist())
 
     return verified, indices_to_remask
 

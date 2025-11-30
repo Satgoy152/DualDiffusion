@@ -158,7 +158,7 @@ def dual_diffusion_generate(
             print("Target length reached.")
             break
 
-        drafter_output, drafter_kv_cache, _ = run_drafter_phase(
+        drafter_result = run_drafter_phase(
             drafter_model,
             drafter_tokenizer,
             current_state,
@@ -172,10 +172,11 @@ def dual_diffusion_generate(
         stats['total_drafter_steps'] += num_drafter_steps
         
         # Update state and cache
-        current_state = drafter_output
-        drafter_past_key_values = drafter_kv_cache
+        current_state = drafter_result[0]
+        drafter_past_key_values = drafter_result[1] if len(drafter_result) > 1 else None
+        drafter_logits = drafter_result[3] if len(drafter_result) > 3 else None
 
-        decoded_full = drafter_tokenizer.decode(drafter_output[0], skip_special_tokens=False)
+        decoded_full = drafter_tokenizer.decode(current_state[0], skip_special_tokens=False)
         print(f"Full decoded for drafter step {stats['total_drafter_steps']} (with special tokens):")
         print(decoded_full)
         print("###############################################")
@@ -183,7 +184,7 @@ def dual_diffusion_generate(
         
         # 2b. Convert to verifier vocabulary
         # Extract generated part (skip prompt)
-        drafter_generated = drafter_output[:, drafter_prompt_len:]
+        drafter_generated = current_state[:, drafter_prompt_len:]
         
         verifier_generated_tokens = convert(
             drafter_mask_id,
@@ -212,7 +213,7 @@ def dual_diffusion_generate(
         print("###############################################")
         
         # 2c. Verifier phase
-        verifier_output = run_verifier_phase(
+        verifier_result = run_verifier_phase(
             verifier_model,
             verifier_tokenizer,
             verifier_input,
@@ -222,6 +223,9 @@ def dual_diffusion_generate(
             **kwargs
         )
         stats['total_verifier_steps'] += num_verifier_steps
+
+        verifier_output = verifier_result[0]
+        verifier_logits = verifier_result[1] if len(verifier_result) > 1 else None
 
         decoded_full = verifier_tokenizer.decode(verifier_output[0], skip_special_tokens=False)
         print(f"Full decoded for verfier step {stats['total_verifier_steps']} (with special tokens):")
@@ -246,6 +250,7 @@ def dual_diffusion_generate(
         
         # 2e. Verification step
         # Handle length mismatch by truncating to minimum length
+        drafter_output = current_state
         min_len = min(drafter_output.size(1), verifier_output_drafter_vocab.size(1))
         if drafter_output.size(1) != verifier_output_drafter_vocab.size(1):
             print(f"Warning: Length mismatch. Drafter: {drafter_output.size(1)}, Verifier(conv): {verifier_output_drafter_vocab.size(1)}. Truncating to {min_len}.")
@@ -258,6 +263,9 @@ def dual_diffusion_generate(
             verifier_output_ver,
             drafter_mask_id,
             verifier_mask_id,
+            drafter_logits=drafter_logits,
+            verifier_logits=verifier_logits,
+            raw_verifier_output=verifier_output,
             **kwargs
         )
         
