@@ -6,6 +6,7 @@ def LLaDA_inf(prompt_tensor, context_tensor, steps, context_size):
 def convert(maskid1, maskid2, context_tensor, tokenizer1, tokenizer2):
     """
     Convert context_tensor from tokenizer1's vocabulary to tokenizer2's vocabulary.
+    Handles mask tokens by splitting text, decoding segments, and re-encoding.
 
     Args:
         maskid1: Mask token ID in tokenizer1
@@ -19,30 +20,47 @@ def convert(maskid1, maskid2, context_tensor, tokenizer1, tokenizer2):
     """
     import torch
 
-    # Decode entire sequence (masks → special placeholder)
-    mask_positions = (context_tensor == maskid1)
+    # Ensure input is 1D or handle batch dimension (assuming batch size 1 for now as per pipeline)
+    if context_tensor.dim() == 2:
+        flat_ids = context_tensor[0]
+    else:
+        flat_ids = context_tensor
+
+    # Find mask indices
+    mask_indices = (flat_ids == maskid1).nonzero(as_tuple=True)[0]
     
-    # Replace masks with pad token for decoding
-    temp_tensor = context_tensor.clone()
-    # temp_tensor[mask_positions] = tokenizer1.pad_token_id
+    new_tokens = []
+    last_idx = 0
     
-    # Decode to text using batch_decode - MUST CONVERT TO LIS
-    text = tokenizer1.batch_decode(temp_tensor.tolist(), skip_special_tokens=False)
-    print("convert tokenizer 1 to text", text)
-    # Re-encode with tokenizer2
-    new_ids = tokenizer2(text)['input_ids']
+    # Iterate through mask positions to split text
+    for mask_idx in mask_indices:
+        # Decode text before this mask
+        if mask_idx > last_idx:
+            segment_ids = flat_ids[last_idx:mask_idx]
+            # Decode segment
+            text_segment = tokenizer1.decode(segment_ids, skip_special_tokens=True)
+            if text_segment:
+                # Encode segment
+                encoded_segment = tokenizer2.encode(text_segment, add_special_tokens=False)
+                new_tokens.extend(encoded_segment)
+        
+        # Add the new mask token
+        new_tokens.append(maskid2)
+        last_idx = mask_idx + 1
+        
+    # Handle remaining text after last mask
+    if last_idx < len(flat_ids):
+        segment_ids = flat_ids[last_idx:]
+        text_segment = tokenizer1.decode(segment_ids, skip_special_tokens=True)
+        if text_segment:
+            encoded_segment = tokenizer2.encode(text_segment, add_special_tokens=False)
+            new_tokens.extend(encoded_segment)
+            
+    # Convert back to tensor
+    output_tensor = torch.tensor([new_tokens], device=context_tensor.device)
     
-    # Handle length mismatch - proportional masking
-    # original_mask_ratio = mask_positions.float().mean()
-    # num_masks = int(len(new_ids) * original_mask_ratio)
-    
-    output_tensor = torch.tensor(new_ids, dtype=context_tensor.dtype, 
-                                  device=context_tensor.device)
-    output_tensor[mask_positions] = maskid2
-    # Mask tokens uniformly
-    # if num_masks > 0:
-    #     mask_indices = torch.linspace(0, len(new_ids)-1, num_masks).long()
-    #     output_tensor[mask_indices] = maskid2
+    # Debug prints
+    print(f"Conversion: {len(flat_ids)} tokens -> {len(new_tokens)} tokens")
     
     return output_tensor
 

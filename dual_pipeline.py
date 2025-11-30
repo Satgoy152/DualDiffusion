@@ -110,18 +110,19 @@ def dual_diffusion_generate(
         drafter_mask_id,
         device
     )
+    
+    # Calculate prompt length for drafter (initial_input is Prompt + Masks)
+    drafter_prompt_len = initial_input.size(1) - max_new_tokens
+    
     decoded_full = drafter_tokenizer.decode(initial_input[0], skip_special_tokens=False)
     print("Full decoded base prompt (with special tokens):")
     print(decoded_full)
     print("###############################################")
     current_state = initial_input
-    input_len = initial_input[0].size(0)
     
     # 2. Main iteration loop
     for iteration in range(max_iterations):
         stats['iterations'] = iteration + 1
-
-        new_tokens = max_new_tokens - (current_state[0].size(0) - input_len)
         
         # 2a. Drafter phase
         drafter_output, drafter_kv_cache, drafter_block_cache = run_drafter_phase(
@@ -129,7 +130,7 @@ def dual_diffusion_generate(
             drafter_tokenizer,
             current_state,
             num_drafter_steps,
-            new_tokens,
+            max_new_tokens,
             drafter_mask_id,
             drafter_generate_fn,
             threshold=0.95,
@@ -143,13 +144,29 @@ def dual_diffusion_generate(
         print("###############################################")
         
         # 2b. Convert to verifier vocabulary
-        verifier_input = convert(
+        # Extract generated part (skip prompt)
+        drafter_generated = drafter_output[:, drafter_prompt_len:]
+        
+        verifier_generated_tokens = convert(
             drafter_mask_id,
             verifier_mask_id,
-            drafter_output[:, initial_input.shape[1]:],
+            drafter_generated,
             drafter_tokenizer,
             verifier_tokenizer
         )
+
+        # Reconstruct Verifier Input (Prompt + Converted Generated)
+        # Get verifier prompt
+        verifier_prompt_input = prepare_masked_query(
+            query, 
+            0, # No extra masks, just prompt
+            verifier_tokenizer, 
+            verifier_mask_id, 
+            device
+        )
+        verifier_prompt_len = verifier_prompt_input.size(1)
+        
+        verifier_input = torch.cat([verifier_prompt_input, verifier_generated_tokens], dim=1)
 
         decoded_full = verifier_tokenizer.decode(verifier_input[0], skip_special_tokens=False)
         print(f"Full decoded for conversion (with special tokens):")
@@ -171,21 +188,36 @@ def dual_diffusion_generate(
         decoded_full = verifier_tokenizer.decode(verifier_output[0], skip_special_tokens=False)
         print(f"Full decoded for verfier step {stats['total_verifier_steps']} (with special tokens):")
         print(decoded_full)
-        break
         
         # 2d. Convert verifier output back to drafter vocabulary
-        verifier_output_drafter_vocab = convert(
+        # Extract generated part
+        verifier_generated = verifier_output[:, verifier_prompt_len:]
+        
+        verifier_output_drafter_vocab_generated = convert(
             verifier_mask_id,
             drafter_mask_id,
-            verifier_output,
+            verifier_generated,
             verifier_tokenizer,
             drafter_tokenizer
         )
         
+        # Reconstruct full sequence for verification (Drafter Prompt + Converted Back Generated)
+        # Use the original drafter prompt part
+        drafter_prompt_part = initial_input[:, :drafter_prompt_len]
+        verifier_output_drafter_vocab = torch.cat([drafter_prompt_part, verifier_output_drafter_vocab_generated], dim=1)
+        
         # 2e. Verification step
+        # Handle length mismatch by truncating to minimum length
+        min_len = min(drafter_output.size(1), verifier_output_drafter_vocab.size(1))
+        if drafter_output.size(1) != verifier_output_drafter_vocab.size(1):
+            print(f"Warning: Length mismatch. Drafter: {drafter_output.size(1)}, Verifier(conv): {verifier_output_drafter_vocab.size(1)}. Truncating to {min_len}.")
+        
+        drafter_output_ver = drafter_output[:, :min_len]
+        verifier_output_ver = verifier_output_drafter_vocab[:, :min_len]
+        
         verified_output, indices_to_remask = verification_fn(
-            drafter_output,
-            verifier_output_drafter_vocab,
+            drafter_output_ver,
+            verifier_output_ver,
             drafter_mask_id,
             verifier_mask_id,
             **kwargs
@@ -204,6 +236,10 @@ def dual_diffusion_generate(
         current_state = verified_output.clone()
         for idx in indices_to_remask:
             current_state[0, idx] = drafter_mask_id
+            
+        # Note: current_state might be shorter than initial_input if truncated.
+        # If we need to maintain length, we might need to pad?
+        # For now, we proceed with the truncated/verified state.
     
     else:
         # If loop completed without break, use last verified output
@@ -253,17 +289,15 @@ def prepare_masked_query(
             tokenize=False
         )
     # Tokenize the prompt
-    prompt_ids = tokenizer([text], return_tensors="pt").to(model.device)
+    prompt_ids = tokenizer(formatted_prompt, return_tensors="pt")["input_ids"].to(device)
     
-    # Create full sequence: prompt + masked tokens
-    # Drafter shouldn't take in a full set of masks - adds them on in the generate function
-    # full_length = len(prompt_ids) + max_new_tokens
-    # masked_sequence = torch.full((1, full_length), mask_id, dtype=torch.long, device=device)
+    # Create masked extension
+    mask_tensor = torch.full((1, max_new_tokens), mask_id, dtype=torch.long, device=device)
     
-    # Copy prompt to beginning
-    # masked_sequence[0, :len(prompt_ids)] = prompt_tensor
+    # Concatenate
+    full_input = torch.cat([prompt_ids, mask_tensor], dim=1)
     
-    return prompt_ids["input_ids"]
+    return full_input
 
 
 def run_drafter_phase(
