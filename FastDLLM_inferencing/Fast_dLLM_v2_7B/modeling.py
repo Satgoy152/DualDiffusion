@@ -682,7 +682,7 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
 
         num_small_blocks = block_size // small_block_size
         
-        # Store logits for each step
+        # Store logits after prompt for each step
         logits_history = []
 
         for block_idx in range(num_blocks):
@@ -707,7 +707,8 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
                     output = self.forward(input_ids=x_t[:, -block_size:], use_cache=True, past_key_values=past_key_values, update_past_key_values=True, block_size=block_size)
                     step_count += 1
                     logits, past_key_values = output.logits, output.past_key_values
-                    logits_history.append(logits)
+                    #get logits after the prompt
+                    logits_history.append(logits[:, prompt_length:, :])
                     next_token = logits[:, -1:, :].argmax(dim=-1)
                     x_t = torch.cat([x_t, next_token], dim=1)
                     break
@@ -734,18 +735,18 @@ class Fast_dLLM_QwenForCausalLM(Fast_dLLM_QwenPreTrainedModel, GenerationMixin):
                                 logits, block_past_key_values = output.logits, output.block_past_key_values
                                 logits = torch.cat([logits[:, :1, :], logits[:, :-1, :]], dim=1)
                                 logits = logits[:, start:end]
-                                logits_history.append(logits)
+                                logits_history.append(logits[:, prompt_length:, :])
                                 step_count += 1
                             else:
                                 logits = self.forward(input_ids=x_t[:,start:end], use_cache=True, past_key_values=past_key_values, update_past_key_values=False, use_block_cache=True, block_past_key_values=block_past_key_values, replace_position=small_block_start_idx).logits
                                 logits = torch.cat([logits[:, :1, :], logits[:, :-1, :]], dim=1)
-                                logits_history.append(logits)
+                                logits_history.append(logits[:, prompt_length:, :])
                                 step_count += 1
                         else:
                             logits = self.forward(input_ids=x_t[:, -block_size:], use_cache=True, past_key_values=past_key_values, update_past_key_values=False).logits
                             logits = torch.cat([logits[:, :1, :], logits[:, :-1, :]], dim=1)
                             logits = logits[:, start:end]
-                            logits_history.append(logits)
+                            logits_history.append(logits[:, prompt_length:, :])
                             step_count += 1
 
 
