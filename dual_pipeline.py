@@ -168,7 +168,6 @@ def dual_diffusion_generate(
             drafter_generate_fn,
             threshold=0.95,
             past_key_values=drafter_past_key_values,
-            **kwargs
         )
         stats['total_drafter_steps'] += num_drafter_steps
         
@@ -266,7 +265,7 @@ def dual_diffusion_generate(
         stats['tokens_remasked_per_iteration'].append(num_remasked)
         
         # 2f. Check if we should continue iterating
-        if num_remasked <= remask_threshold or iteration == max_iterations - 1:
+        if iteration == max_iterations - 1:
             # Done iterating - return final output
             final_output = verified_output
             break
@@ -347,7 +346,7 @@ def run_drafter_phase(
     max_new_tokens,
     mask_id: int,
     generate_fn: Optional[Callable] = None,
-    threshold=0.95
+    threshold=0.95,
     **kwargs
 ) -> torch.Tensor:
     """
