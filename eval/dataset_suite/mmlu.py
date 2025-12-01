@@ -71,23 +71,25 @@ def run_mmlu(generate_func):
     print("Running MMLU evaluation...")
     dataset = load_mmlu()
     correct = 0
+    total_tokens = 0
     for item in dataset:
         prompt = item["question"]
-        print("prompt is ", prompt)
-        generated_text = generate_func(prompt)
-        print("response is ", generated_text)
-        print("detected answer is ", extract_mmlu_answer(generated_text))
-        print("correct answer is ", item['answer'])
+        # print("prompt is ", prompt)
+        generated_text, num_tokens = generate_func(prompt)
+        total_tokens += num_tokens
+        # print("response is ", generated_text)
+        # print("detected answer is ", extract_mmlu_answer(generated_text))
+        # print("correct answer is ", item['answer'])
 
         if item['answer'] == extract_mmlu_answer(generated_text):
-            print("correct")
+            # print("correct")
             correct += 1
-        else:
-            print("wrong")
+        # else:
+        #     print("wrong")
     
     accuracy = correct / len(dataset)
     print(f"MMLU Accuracy: {accuracy}")
-    return accuracy
+    return accuracy, total_tokens
 
 if __name__ == '__main__':
     # This is a placeholder for the actual generate function

@@ -96,8 +96,8 @@ class ModelWrapper:
         """
 
         # Convert eval params → model parameters
-        steps = params.get("steps", 256)
-        max_new_tokens = params.get("max_new_tokens", 1024)
+        steps = params.get("steps", 128)
+        max_new_tokens = params.get("max_new_tokens", 512)
 
         print(f"[ModelWrapper] Generating: steps={steps}, max_new_tokens={max_new_tokens}")
 

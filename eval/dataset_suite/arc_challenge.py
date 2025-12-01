@@ -57,10 +57,12 @@ def run_arc_challenge(generate_func):
     print("Running ARC-Challenge evaluation...")
     dataset = load_arc_challenge()
     correct = 0
+    total_tokens = 0
     for item in dataset:
         prompt = item["question"]
         # print("prompt is ", prompt)
-        generated_text = generate_func(prompt)
+        generated_text, num_tokens = generate_func(prompt)
+        total_tokens += num_tokens
         # print("response is ", generated_text)
         # print("detected answer is ", extract_arc_answer(generated_text))
         # print("correct answer is ", item['answer'])
@@ -73,7 +75,7 @@ def run_arc_challenge(generate_func):
     
     accuracy = correct / len(dataset)
     print(f"ARC-Challenge Accuracy: {accuracy}")
-    return accuracy
+    return accuracy, total_tokens
     
 
 if __name__ == '__main__':

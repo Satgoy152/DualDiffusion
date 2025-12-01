@@ -71,7 +71,7 @@ def print_summary_for_readme(config, main_results_list):
     
     summary = []
     summary.append(f"## Experiment: {config.get('experiment_name', 'N/A')}")
-    summary.append(f"**Model:** `{config.get('model_path', 'N/A')}`")
+    summary.append(f"**Model:** `{config.get('model', 'N/A')}`")
     
     summary.append("\n### Key Results")
 

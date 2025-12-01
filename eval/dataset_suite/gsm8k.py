@@ -40,19 +40,23 @@ def run_gsm8k(generate_func):
     print("Running GSM8K evaluation...")
     dataset = load_gsm8k()
     correct = 0
+    total_tokens = 0
+    
     for item in dataset:
         question = item["question"]
         prompt = f"{question}\nRespond with no steps or explanation, just give the final answer in the format 'Answer: <number>'."
-        print("Asking question ", prompt)
-        generated_text = generate_func(prompt)
-        print("Answer was ", generated_text, " wanted ", item["answer"])
+        # print("Asking question ", prompt)
+        generated_text, num_tokens = generate_func(prompt)
+        total_tokens += num_tokens
+        # print("We had ", num_tokens, " tokens")
+        # print("Answer was ", generated_text, " wanted ", item["answer"])
         pred_answer = extract_answer(generated_text)
         if pred_answer == item["answer"]:
             correct += 1
     
     accuracy = correct / len(dataset)
     print(f"GSM8K Accuracy: {accuracy}")
-    return accuracy
+    return accuracy, total_tokens
 
 if __name__ == '__main__':
     # This is a placeholder for the actual generate function
