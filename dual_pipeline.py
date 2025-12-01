@@ -8,7 +8,7 @@ with flexible verification strategies.
 import torch
 from typing import Optional, Callable, Dict, Any
 from inference import convert
-from verification_algos import trust_verifier
+from verification_algos import trust_verifier, confidence_threshold_verification
 
 
 def dual_diffusion_generate(
@@ -257,6 +257,9 @@ def dual_diffusion_generate(
         
         drafter_output_ver = drafter_output[:, :min_len]
         verifier_output_ver = verifier_output_drafter_vocab[:, :min_len]
+
+        print("Drafter Logits: ", drafter_logits[0].shape)
+        print("Verifier Logits: ", verifier_logits.shape)
         
         verified_output, indices_to_remask = verification_fn(
             drafter_output_ver,
