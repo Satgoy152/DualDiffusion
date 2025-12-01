@@ -53,36 +53,58 @@ class ModelWrapper:
         inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
         return inputs
 
-    def generate(self, prompt, params):
+    def generate(self, prompt, params=None):
+        if params is None:
+            params = {}
+
         steps = params.get("steps", 256)
         max_new_tokens = params.get("max_new_tokens", 1024)
+        small_block_size = params.get("small_block_size", 8)
+        threshold = params.get("threshold", 0.95)
 
+        # Prepare input
         inputs = self._prepare_chat_input(prompt)
         input_len = inputs["input_ids"].shape[1]
 
+        # Generation
         start = time.time()
         with torch.inference_mode():
-            gen_ids, _, _ = self.model.generate(
+            gen_out = self.model.generate(
                 inputs["input_ids"],
                 tokenizer=self.tokenizer,
                 max_new_tokens=max_new_tokens,
-                small_block_size=8,
-                threshold=0.95,
+                small_block_size=small_block_size,
+                threshold=threshold,
                 steps=steps
             )
         end = time.time()
 
+        # Update elapsed time
         self.total_elapsed_time += (end - start)
 
+        # Update GPU peak
         if torch.cuda.is_available():
             peak = torch.cuda.max_memory_allocated()
             self.absolute_gpu_peak_memory = max(self.absolute_gpu_peak_memory, peak)
 
-        new_tokens = gen_ids[0][input_len:]
+        # Unpack safely
+        if isinstance(gen_out, tuple):
+            gen_ids = gen_out[0]
+        else:
+            gen_ids = gen_out
+
+        # Remove prompt tokens
+        if gen_ids.shape[1] > input_len:
+            new_tokens = gen_ids[0][input_len:]
+        else:
+            new_tokens = gen_ids[0]
+
+        # Decode
         text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
         count = new_tokens.shape[0]
 
         return text, count
+
 
 
 # ---------------------------------------------------------

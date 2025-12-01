@@ -77,7 +77,7 @@ class DualDiffusionWrapper:
     # -----------------------------------------------------
     def fastdllm_generate_fn(self, model, tokenizer, input_ids, num_steps, **kwargs):
         """Wrapper for Fast_dLLM generation."""
-        gen_ids, kv_cache, block_kv_cache = model.generate(
+        gen_ids = model.generate(
             input_ids,
             tokenizer=tokenizer,
             max_new_tokens=kwargs.get("max_new_tokens", 256),
@@ -85,7 +85,7 @@ class DualDiffusionWrapper:
             threshold=kwargs.get("threshold", 0.95),
             steps=num_steps
         )
-        return gen_ids, kv_cache, block_kv_cache
+        return gen_ids
 
     def llada_generate_fn(self, model, tokenizer, input_ids, num_steps, **kwargs):
         """Wrapper for LLaDA generation."""
