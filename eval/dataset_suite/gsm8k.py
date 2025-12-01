@@ -45,11 +45,11 @@ def run_gsm8k(generate_func):
     for item in dataset:
         question = item["question"]
         prompt = f"{question}\nRespond with no steps or explanation, just give the final answer in the format 'Answer: <number>'."
-        print("Asking question ", prompt)
+        # print("Asking question ", prompt)
         generated_text, num_tokens = generate_func(prompt)
         total_tokens += num_tokens
-        print("We had ", num_tokens, " tokens")
-        print("Answer was ", generated_text, " wanted ", item["answer"])
+        # print("We had ", num_tokens, " tokens")
+        # print("Answer was ", generated_text, " wanted ", item["answer"])
         pred_answer = extract_answer(generated_text)
         if pred_answer == item["answer"]:
             correct += 1

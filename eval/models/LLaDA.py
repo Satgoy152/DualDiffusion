@@ -44,12 +44,13 @@ class ModelWrapper:
 
         # For LLaDA, steps should be >= gen_length for full unmasking
         gen_length = params.get("gen_length", 64)
-        n_steps = params.get("n_steps", gen_length)  # <-- MATCH OR EXCEED gen_length
+        n_steps = params.get("n_steps", gen_length)
         k = params.get("k", 1)
         block_length = params.get("block_length", None)
         temperature = params.get("temperature", 0.0)
         cfg_scale = params.get("cfg_scale", 0.0)
         remasking = params.get("remasking", "low_confidence")
+        eos_token_id = params.get("eos_token_id", 126081)  # From your debug output
 
         # Apply chat template if prompt is a string
         if isinstance(prompt, str):
@@ -87,13 +88,21 @@ class ModelWrapper:
             peak = torch.cuda.max_memory_allocated()
             self.absolute_gpu_peak_memory = max(self.absolute_gpu_peak_memory, peak)
 
+        # Get generated tokens (excluding prompt)
+        generated_token_ids = out_ids[:, input_ids.shape[1]:]
+        
+        # Count tokens up to first EOS (or all if no EOS)
+        eos_positions = (generated_token_ids[0] == eos_token_id).nonzero(as_tuple=True)[0]
+        if len(eos_positions) > 0:
+            num_tokens = eos_positions[0].item() + 1  # Include the EOS token
+        else:
+            num_tokens = generated_token_ids.shape[1]
+        
         # Decode
         generated_text = self.tokenizer.batch_decode(
-            out_ids[:, input_ids.shape[1]:], 
+            generated_token_ids, 
             skip_special_tokens=True
         )[0]
-        
-        num_tokens = out_ids.shape[1] - input_ids.shape[1]
 
         return generated_text, num_tokens
 
