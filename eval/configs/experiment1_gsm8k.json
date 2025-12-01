@@ -1,6 +1,6 @@
 {
   "experiment_name": "GSM8K Evaluation",
-  "model": "fastDLLM",
+  "model": "LLaDA",
   "model_path": "/path/to/your/model",
   "inherits": "default.json",
   "datasets": {
