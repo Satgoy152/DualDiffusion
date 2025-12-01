@@ -172,9 +172,40 @@ def dual_diffusion_generate(
         stats['total_drafter_steps'] += num_drafter_steps
         
         # Update state and cache
-        current_state = drafter_result[0]
-        drafter_past_key_values = drafter_result[1] if len(drafter_result) > 1 else None
-        drafter_logits = drafter_result[3] if len(drafter_result) > 3 else None
+        if isinstance(drafter_result, tuple):
+            current_state = drafter_result[0]
+            drafter_past_key_values = drafter_result[1] if len(drafter_result) > 1 else None
+            # index 2 is block_past_key_values, index 3 is logits if present
+            drafter_logits = drafter_result[3] if len(drafter_result) > 3 else None
+        else:
+            current_state = drafter_result
+            drafter_logits = None
+            
+        if drafter_logits is not None:
+            # Normalize to list for processing if it's a single tensor
+            is_list = isinstance(drafter_logits, list)
+            logits_seq = drafter_logits if is_list else [drafter_logits]
+            
+            if len(logits_seq) > 0:
+                # Infer block size from the first logit tensor
+                # Assuming shape [batch, block_size, vocab]
+                block_size = logits_seq[0].size(1)
+                total_len = current_state.size(1)
+                
+                # Calculate where the block starts in the full sequence
+                block_start_idx = total_len - block_size
+                
+                # Calculate overlap with prompt
+                # prompt ends at drafter_prompt_len
+                # if block_start_idx < drafter_prompt_len, there is overlap
+                overlap = drafter_prompt_len - block_start_idx
+                
+                if overlap > 0:
+                    # Slice off the prompt part
+                    logits_seq = [l[:, overlap:, :] for l in logits_seq]
+            
+            drafter_logits = logits_seq if is_list else logits_seq[0]
+        
 
         decoded_full = drafter_tokenizer.decode(current_state[0], skip_special_tokens=False)
         print(f"Full decoded for drafter step {stats['total_drafter_steps']} (with special tokens):")
@@ -226,6 +257,10 @@ def dual_diffusion_generate(
 
         verifier_output = verifier_result[0]
         verifier_logits = verifier_result[1] if len(verifier_result) > 1 else None
+        
+        # Slice logits to match size of drafter logits if both are present
+        if verifier_logits is not None and drafter_logits is not None:
+            verifier_logits = verifier_logits[:, :drafter_logits.size(1), :]
 
         decoded_full = verifier_tokenizer.decode(verifier_output[0], skip_special_tokens=False)
         print(f"Full decoded for verfier step {stats['total_verifier_steps']} (with special tokens):")
