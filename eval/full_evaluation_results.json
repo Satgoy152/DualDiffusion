@@ -2,14 +2,14 @@
     "all_runs": [
         {
             "run_parameters": {},
-            "gsm8k_accuracy": 0.5,
-            "gsm8k_total_tokens": 32,
+            "gsm8k_accuracy": 0.75,
+            "gsm8k_total_tokens": 359,
             "speed_efficiency": {
                 "8": {
-                    "wall_clock_time_total": 12.348737239837646,
-                    "peak_gpu_memory_bytes": 16263610368,
-                    "throughput_tokens_per_sec": 2.5913580780362215,
-                    "total_tokens_generated": 32
+                    "wall_clock_time_total": 4.472280502319336,
+                    "peak_gpu_memory_bytes": 31573265920,
+                    "throughput_tokens_per_sec": 80.27224585171294,
+                    "total_tokens_generated": 359
                 }
             }
         }
