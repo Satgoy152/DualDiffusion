@@ -224,6 +224,184 @@ def no_verification(
     """
     return drafter_output.clone(), set()
 
+def kl_divergence_verification(
+    drafter_output: torch.Tensor,
+    verifier_output: torch.Tensor,
+    drafter_mask_id: int,
+    verifier_mask_id: int,
+    drafter_logits: Optional[list] = None, # List of logits per step
+    verifier_logits: Optional[torch.Tensor] = None,
+    threshold: float = 0.5, # Min agreement score
+    raw_verifier_output: Optional[torch.Tensor] = None,
+    drafter_history: Optional[list] = None, # List of history dicts per step
+    **kwargs
+) -> Tuple[torch.Tensor, Set[int]]:
+    """
+    Verification based on agreement between Drafter and Verifier for tokens 
+    unmasked at specific steps.
+    
+    Since vocabularies differ, we check: P_verifier(Token_drafter_converted)
+    """
+    verified = verifier_output.clone()
+    indices_to_remask = set()
+    
+    if drafter_logits is None or verifier_logits is None or drafter_history is None:
+        print("Missing logits or history for KL verification. Skipping.")
+        return verified, indices_to_remask
+
+    # We need tokenizers to map the specific token ID
+    drafter_tokenizer = kwargs.get('drafter_tokenizer')
+    verifier_tokenizer = kwargs.get('verifier_tokenizer')
+    
+    if not drafter_tokenizer or not verifier_tokenizer:
+        print("Missing tokenizers for KL verification.")
+        return verified, indices_to_remask
+
+    # 1. Align Verifier Logits to the end of the sequence
+    # verifier_logits: [1, seq_len, vocab_v]
+    # raw_verifier_output: [1, total_len]
+    if verifier_logits.dim() == 3:
+        v_logits = verifier_logits[0] # [seq_len, vocab_v]
+    else:
+        v_logits = verifier_logits
+
+    # Calculate offset between logits and full sequence
+    # We assume logits correspond to the END of the sequence
+    logit_len = v_logits.size(0)
+    total_len = verified.size(1)
+    offset = total_len - logit_len
+
+    # Pre-calculate Verifier Probabilities
+    verifier_probs = F.softmax(v_logits, dim=-1)
+
+    # 2. Iterate through Drafter Steps to find unmasked tokens
+    # drafter_history contains dicts with 'unmasked_indices', 'chosen_tokens', 'start_idx'
+    
+    for step_idx, step_info in enumerate(drafter_history):
+        if not isinstance(step_info, dict): continue
+        
+        unmasked_indices = step_info.get('unmasked_indices')
+        chosen_tokens = step_info.get('chosen_tokens')
+        start_idx = step_info.get('start_idx')
+        
+        if unmasked_indices is None or chosen_tokens is None:
+            continue
+            
+        # unmasked_indices is (batch_idx, relative_idx)
+        # We assume batch size 1 for now
+        batch_indices, relative_indices = unmasked_indices
+        
+        if len(relative_indices) == 0:
+            continue
+            
+        # For each unmasked token, check Verifier agreement
+        for i, rel_idx in enumerate(relative_indices):
+            # 1. Get the token ID the drafter chose
+            drafter_token_id = chosen_tokens[i].item()
+            
+            # Calculate absolute index in the full sequence
+            abs_idx = start_idx + rel_idx.item()
+            
+            # 2. Convert this specific token to Verifier Vocab
+            # This is slow but necessary for cross-vocab comparison
+            token_text = drafter_tokenizer.decode([drafter_token_id])
+            verifier_token_ids = verifier_tokenizer.encode(token_text, add_special_tokens=False)
+            
+            if len(verifier_token_ids) == 0: continue
+            
+            # If 1-to-many mapping, just take the first one or average (simplification)
+            target_v_token = verifier_token_ids[0]
+            
+            # 3. Check Verifier Probability for this token
+            # Map abs_idx to verifier logit space
+            v_idx = abs_idx - offset
+            
+            if 0 <= v_idx < logit_len:
+                prob_verifier = verifier_probs[v_idx, target_v_token].item()
+                
+                # 4. If Verifier thinks this token is unlikely, reject it
+                if prob_verifier < threshold:
+                    indices_to_remask.add(abs_idx)
+
+    return verified, indices_to_remask
+
+
+def unmask_confidence_verification(
+    drafter_output: torch.Tensor,
+    verifier_output: torch.Tensor,
+    drafter_mask_id: int,
+    verifier_mask_id: int,
+    drafter_logits: Optional[list] = None,
+    verifier_logits: Optional[torch.Tensor] = None,
+    threshold: float = 0.9,
+    raw_verifier_output: Optional[torch.Tensor] = None,
+    drafter_history: Optional[list] = None,
+    **kwargs
+) -> Tuple[torch.Tensor, Set[int]]:
+    """
+    Verification based on Verifier's confidence at positions unmasked by the Drafter.
+    
+    This method avoids tokenizer mapping by simply checking if the Verifier is 
+    confident enough at the positions the Drafter chose to unmask.
+    
+    If Verifier Confidence < Threshold, we remask.
+    """
+    verified = verifier_output.clone()
+    indices_to_remask = set()
+    
+    if verifier_logits is None or drafter_history is None:
+        print("Missing logits or history for Unmask Confidence verification. Skipping.")
+        return verified, indices_to_remask
+
+    # 1. Align Verifier Logits
+    if verifier_logits.dim() == 3:
+        v_logits = verifier_logits[0] # [seq_len, vocab_v]
+    else:
+        v_logits = verifier_logits
+
+    # Calculate offset between logits and full sequence
+    logit_len = v_logits.size(0)
+    total_len = verified.size(1)
+    offset = total_len - logit_len
+
+    # Pre-calculate Verifier Max Probabilities (Confidence)
+    # We don't care WHICH token is max, just THAT it is confident
+    verifier_probs = F.softmax(v_logits, dim=-1)
+    verifier_confidence, _ = torch.max(verifier_probs, dim=-1)
+
+    # 2. Iterate through Drafter Steps to find unmasked tokens
+    for step_idx, step_info in enumerate(drafter_history):
+        if not isinstance(step_info, dict): continue
+        
+        unmasked_indices = step_info.get('unmasked_indices')
+        start_idx = step_info.get('start_idx')
+        
+        if unmasked_indices is None:
+            continue
+            
+        # unmasked_indices is (batch_idx, relative_idx)
+        batch_indices, relative_indices = unmasked_indices
+        
+        if len(relative_indices) == 0:
+            continue
+            
+        # For each unmasked token, check Verifier Confidence
+        for i, rel_idx in enumerate(relative_indices):
+            # Calculate absolute index in the full sequence
+            abs_idx = start_idx + rel_idx.item()
+            
+            # Map abs_idx to verifier logit space
+            v_idx = abs_idx - offset
+            
+            if 0 <= v_idx < logit_len:
+                conf = verifier_confidence[v_idx].item()
+                
+                # If Verifier is not confident enough, reject the unmasking
+                if conf < threshold:
+                    indices_to_remask.add(abs_idx)
+
+    return verified, indices_to_remask
+
 
 # Default verification algorithm
 default_verification = trust_verifier

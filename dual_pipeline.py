@@ -176,35 +176,83 @@ def dual_diffusion_generate(
             current_state = drafter_result[0]
             drafter_past_key_values = drafter_result[1] if len(drafter_result) > 1 else None
             # index 2 is block_past_key_values, index 3 is logits if present
-            drafter_logits = drafter_result[3] if len(drafter_result) > 3 else None
+            drafter_logits_raw = drafter_result[3] if len(drafter_result) > 3 else None
         else:
             current_state = drafter_result
-            drafter_logits = None
+            drafter_logits_raw = None
             
-        if drafter_logits is not None:
+        drafter_logits = None
+        drafter_history = []
+        
+        if drafter_logits_raw is not None:
             # Normalize to list for processing if it's a single tensor
-            is_list = isinstance(drafter_logits, list)
-            logits_seq = drafter_logits if is_list else [drafter_logits]
+            is_list = isinstance(drafter_logits_raw, list)
+            logits_seq = drafter_logits_raw if is_list else [drafter_logits_raw]
             
-            if len(logits_seq) > 0:
-                # Infer block size from the first logit tensor
-                # Assuming shape [batch, block_size, vocab]
-                block_size = logits_seq[0].size(1)
-                total_len = current_state.size(1)
+            drafter_logits_list = []
+            
+            for step_data in logits_seq:
+                if isinstance(step_data, dict):
+                    step_logits = step_data['logits']
+                    start_idx = step_data['abs_start_index']
+                    unmasked_indices = step_data['unmasked_relative_indices']
+                    chosen_tokens = step_data['chosen_token_ids']
+                elif isinstance(step_data, tuple):
+                    # Handle tuple formats
+                    if len(step_data) == 4:
+                         step_logits, start_idx, unmasked_indices, chosen_tokens = step_data
+                    elif len(step_data) == 3:
+                         step_logits, start_idx, unmasked_indices = step_data
+                         chosen_tokens = None
+                    else:
+                         step_logits, start_idx = step_data
+                         unmasked_indices = None
+                         chosen_tokens = None
+                else:
+                    step_logits = step_data
+                    # Fallback estimation
+                    block_size = step_logits.size(1)
+                    start_idx = current_state.size(1) - block_size
+                    unmasked_indices = None
+                    chosen_tokens = None
                 
-                # Calculate where the block starts in the full sequence
-                block_start_idx = total_len - block_size
-                
-                # Calculate overlap with prompt
-                # prompt ends at drafter_prompt_len
-                # if block_start_idx < drafter_prompt_len, there is overlap
-                overlap = drafter_prompt_len - block_start_idx
-                
+                # Convert boolean mask to indices if necessary
+                if unmasked_indices is not None and isinstance(unmasked_indices, torch.Tensor) and unmasked_indices.dtype == torch.bool:
+                    unmasked_indices = torch.where(unmasked_indices)
+
+                # Slice prompt overlap
+                overlap = max(0, drafter_prompt_len - start_idx)
                 if overlap > 0:
-                    # Slice off the prompt part
-                    logits_seq = [l[:, overlap:, :] for l in logits_seq]
-            
-            drafter_logits = logits_seq if is_list else logits_seq[0]
+                    step_logits = step_logits[:, overlap:, :]
+                    # Adjust start_idx effectively for the slice
+                    start_idx += overlap
+                    
+                    # Adjust unmasked indices if they fall within the overlap region
+                    if unmasked_indices is not None:
+                        # unmasked_indices is tuple (batch_idx, relative_idx)
+                        batch_idx, rel_idx = unmasked_indices
+                        valid_mask = rel_idx >= overlap
+                        if valid_mask.any():
+                            unmasked_indices = (batch_idx[valid_mask], rel_idx[valid_mask] - overlap)
+                            if chosen_tokens is not None:
+                                chosen_tokens = chosen_tokens[valid_mask]
+                        else:
+                            unmasked_indices = None
+                            chosen_tokens = None
+                
+                drafter_logits_list.append(step_logits)
+                
+                # Store history info
+                drafter_history.append({
+                    'chosen_tokens': chosen_tokens,
+                    'start_idx': start_idx,
+                    'unmasked_indices': unmasked_indices
+                })
+
+            if len(drafter_logits_list) > 0:
+                # Set the final logits for other functions to use (last step)
+                drafter_logits = drafter_logits_list[-1]
+                drafter_logits_start_idx = drafter_history[-1]['start_idx']
         
 
         decoded_full = drafter_tokenizer.decode(current_state[0], skip_special_tokens=False)
@@ -260,7 +308,20 @@ def dual_diffusion_generate(
         
         # Slice logits to match size of drafter logits if both are present
         if verifier_logits is not None and drafter_logits is not None:
-            verifier_logits = verifier_logits[:, :drafter_logits.size(1), :]
+            # Align lengths by slicing off the prefix of verifier logits
+            # so that they correspond to the same generated tokens as drafter_logits
+            d_len = drafter_logits[0].size(1)
+            v_len = verifier_logits.size(1)
+            rel_start = max(0, drafter_logits_start_idx - drafter_prompt_len)
+            
+            # If verifier has enough tokens to cover this start point
+            if v_len > rel_start:
+                 verifier_logits = verifier_logits[:, rel_start:, :]
+                 
+            # Now truncate to match lengths (taking the prefix of the slice, which corresponds to the block)
+            min_len = min(d_len, v_len)
+            drafter_logits = drafter_logits[:, :min_len, :]
+            verifier_logits = verifier_logits[:, :min_len, :]
 
         decoded_full = verifier_tokenizer.decode(verifier_output[0], skip_special_tokens=False)
         print(f"Full decoded for verfier step {stats['total_verifier_steps']} (with special tokens):")
@@ -304,6 +365,7 @@ def dual_diffusion_generate(
             drafter_logits=drafter_logits,
             verifier_logits=verifier_logits,
             raw_verifier_output=verifier_output,
+            drafter_history=drafter_history,
             **kwargs
         )
         
