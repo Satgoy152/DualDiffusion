@@ -2,6 +2,7 @@ import argparse
 import importlib
 from functools import partial
 import itertools
+import math
 from utils import helpers, reporting
 from metrics.diversity import calculate_distinct_n, calculate_entropy
 from metrics.speed import measure_speed_and_efficiency

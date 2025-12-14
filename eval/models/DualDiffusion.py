@@ -70,6 +70,9 @@ class DualDiffusionWrapper:
         self.total_elapsed_time = 0.0
         self.absolute_gpu_peak_memory = 0
 
+        self.total_accepted_nll = 0.0
+        self.total_accepted_tokens = 0 
+
         print("[DualDiffusionWrapper] All models loaded.\n")
 
     # -----------------------------------------------------
@@ -153,8 +156,12 @@ class DualDiffusionWrapper:
 
         stats = result['stats']
         print("stats ----")
-        print(stats['accepted_nll_sum'])
-        print(stats['accepted_token_count'])
+
+        self.total_accepted_nll += stats['accepted_nll_sum']
+        self.total_accepted_tokens += stats['accepted_token_count']
+
+        print(self.total_accepted_nll)
+        print(self.total_accepted_tokens)
 
         output_text = result["output_text"]
         num_tokens = len(self.verifier_tokenizer(output_text)["input_ids"])
