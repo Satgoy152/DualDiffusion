@@ -104,71 +104,42 @@ def dual_diffusion_generate(
         
         stats['tokens_remasked_per_iteration'].append(len(indices_to_remask))
 
-        # ==============================================================================
-        # ROBUST PERPLEXITY CALCULATION (CAUSAL FORWARD PASS)
-        # ==============================================================================
-        # We calculate the perplexity of the accepted tokens using the Drafter itself.
-        # This is a standard "Forward Pass" method, robust to hooks or decoding strategies.
+        # Perplexity Calc
         
-        # 1. Run forward pass on the accepted sequence
         with torch.no_grad():
-            # verified_output contains [Prompt + Generated_Tokens]
             outputs = drafter_model(verified_output)
             logits = outputs.logits
             
-            # 2. Shift logits and labels for Causal LM loss (next token prediction)
-            # Logits at [:-1] predict labels at [1:]
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = verified_output[..., 1:].contiguous()
             
-            # 3. Calculate element-wise Cross Entropy (NLL)
             loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-            # flatten to [batch*seq_len, vocab] and [batch*seq_len]
+
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             loss = loss.view(shift_labels.size()) # Reshape back to [batch, seq_len]
-
-            # 4. Create Evaluation Mask
-            # We want to count a token IF:
-            #   a. It is NOT part of the prompt (we only evaluate generation)
-            #   b. It is NOT a token we just rejected/masked
             
             eval_mask = torch.ones_like(shift_labels, dtype=torch.bool)
             
-            # a. Mask out prompt
-            # Note: shift_labels indices are shifted by 1 relative to full sequence
-            # So index 0 in shift_labels corresponds to index 1 in full sequence
-            # If prompt length is P, we want to ignore indices 0 to P-2 in shift_labels?
-            # Easiest way: absolute indices.
+            # Mask out prompt
             
             seq_len = verified_output.size(1)
-            # Indices [0 ... seq_len-1]
-            # prompt ends at drafter_prompt_len. 
-            # We want to evaluate tokens starting from drafter_prompt_len.
-            # In shift_labels, index i corresponds to verified_output[i+1].
-            # So we want i+1 >= drafter_prompt_len  =>  i >= drafter_prompt_len - 1
-            
+           
             prompt_mask = torch.arange(seq_len - 1, device=device) >= (drafter_prompt_len - 1)
             eval_mask = eval_mask & prompt_mask
             
-            # b. Mask out rejected tokens
+            # Mask out rejected tokens
             if indices_to_remask:
-                # indices_to_remask are absolute indices in verified_output
                 for idx in indices_to_remask:
-                    # We need to map absolute idx to shift_labels idx.
-                    # shift_labels[i] is verified_output[i+1]
-                    # So if verified_output[idx] is rejected, we want to mask shift_labels[idx-1]
                     shifted_idx = idx - 1
                     if 0 <= shifted_idx < eval_mask.size(1):
                         eval_mask[0, shifted_idx] = False
 
-            # 5. Sum and Count
+            # Sum and Count
             valid_loss = loss * eval_mask
             
             total_accepted_nll += valid_loss.sum().item()
             total_accepted_count += eval_mask.sum().item()
-        # ==============================================================================
 
-        # Loop Control
         if iteration == max_iterations - 1:
             final_output = verified_output
             break
