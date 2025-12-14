@@ -40,6 +40,9 @@ class ModelWrapper:
         self.total_elapsed_time = 0.0
         self.absolute_gpu_peak_memory = 0
 
+        self.total_accepted_nll = 0.0
+        self.total_accepted_tokens = 0
+
         print("[ModelWrapper] Model loaded successfully.\n")
 
     def _prepare_chat_input(self, prompt):
@@ -92,6 +95,29 @@ class ModelWrapper:
             gen_ids = gen_out[0]
         else:
             gen_ids = gen_out
+
+        # Calculate perplexity on the generated tokens
+        with torch.no_grad():
+            outputs = self.model(gen_ids)
+            logits = outputs.logits
+
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = gen_ids[..., 1:].contiguous()
+
+            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss.view(shift_labels.size())
+
+            # We only want to evaluate the generated tokens, not the prompt
+            eval_mask = torch.ones_like(shift_labels, dtype=torch.bool)
+            prompt_len = inputs["input_ids"].shape[1]
+            eval_mask[:, :prompt_len-1] = False
+
+            valid_loss = loss * eval_mask
+            
+            self.total_accepted_nll += valid_loss.sum().item()
+            self.total_accepted_tokens += eval_mask.sum().item()
+
 
         # Remove prompt tokens
         if gen_ids.shape[1] > input_len:

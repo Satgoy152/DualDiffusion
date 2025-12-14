@@ -6,8 +6,10 @@ import sys
 import os
 import torch
 import time
+import math
 from transformers import AutoTokenizer, AutoModel, AutoConfig, GenerationConfig
 
+# Path setup matches your environment
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 fastdllm_path = os.path.join(repo_root, "FastDLLM_inferencing")
 sys.path.insert(0, repo_root)
@@ -154,16 +156,53 @@ class DualDiffusionWrapper:
             peak = torch.cuda.max_memory_allocated()
             self.absolute_gpu_peak_memory = max(self.absolute_gpu_peak_memory, peak)
 
-        stats = result['stats']
-        print("stats ----")
-
-        self.total_accepted_nll += stats['accepted_nll_sum']
-        self.total_accepted_tokens += stats['accepted_token_count']
-
-        print(self.total_accepted_nll)
-        print(self.total_accepted_tokens)
-
         output_text = result["output_text"]
+
+        # =========================================================
+        #   Local PPL Calculation (Independent of pipeline)
+        # =========================================================
+        # Note: We use the Drafter (Causal LM) to calculate perplexity 
+        # because the Verifier is a masked diffusion model.
+        
+        # 1. Re-tokenize the final output to get tensor IDs
+        full_ids = self.drafter_tokenizer(output_text, return_tensors="pt").input_ids.to(self.device)
+        
+        # 2. Re-tokenize prompt to find where to start evaluating
+        prompt_ids = self.drafter_tokenizer(prompt, return_tensors="pt").input_ids
+        prompt_len = prompt_ids.shape[1]
+
+        # 3. Standard Causal Forward Pass
+        with torch.no_grad():
+            outputs = self.drafter(full_ids)
+            logits = outputs.logits
+
+            # Shift logits and labels for next-token prediction
+            # Logit[i] predicts Label[i+1]
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = full_ids[..., 1:].contiguous()
+
+            # Calculate Loss (NLL)
+            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss.view(shift_labels.size())
+
+            # 4. Mask out the prompt (we only evaluate the new tokens)
+            eval_mask = torch.ones_like(shift_labels, dtype=torch.bool)
+            
+            # The indices 0 to prompt_len-2 in shift_labels correspond to predicting the prompt.
+            # Index prompt_len-1 corresponds to predicting the first NEW token.
+            safe_start_idx = min(prompt_len - 1, eval_mask.shape[1])
+            eval_mask[:, :safe_start_idx] = False
+
+            valid_loss = loss * eval_mask
+
+            # 5. Update Global Stats
+            self.total_accepted_nll += valid_loss.sum().item()
+            self.total_accepted_tokens += eval_mask.sum().item()
+
+        # =========================================================
+
+        # Use verifier tokenizer for final token count if that is the standard
         num_tokens = len(self.verifier_tokenizer(output_text)["input_ids"])
 
         return output_text, num_tokens
