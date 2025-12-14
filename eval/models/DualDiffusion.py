@@ -151,6 +151,11 @@ class DualDiffusionWrapper:
             peak = torch.cuda.max_memory_allocated()
             self.absolute_gpu_peak_memory = max(self.absolute_gpu_peak_memory, peak)
 
+        stats = result['stats']
+        print("stats ----")
+        print(stats['accepted_nll_sum'])
+        print(stats['accepted_token_count'])
+
         output_text = result["output_text"]
         num_tokens = len(self.verifier_tokenizer(output_text)["input_ids"])
 

@@ -23,7 +23,7 @@ REPRODUCIBILITY REPORT
   - run_parameters: {}
   - gsm8k_accuracy: 0.75
   - gsm8k_total_tokens: 359
-  - speed_efficiency: {8: {'wall_clock_time_total': 4.492039680480957, 'peak_gpu_memory_bytes': 31729840640, 'throughput_tokens_per_sec': 79.91915155156472, 'total_tokens_generated': 359}}
+  - speed_efficiency: {8: {'wall_clock_time_total': 4.515999794006348, 'peak_gpu_memory_bytes': 31778829312, 'throughput_tokens_per_sec': 79.49513205834646, 'total_tokens_generated': 359}}
 
 [Notes]
   - This report contains the key details to reproduce the experiment.
