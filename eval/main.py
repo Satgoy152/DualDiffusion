@@ -152,6 +152,18 @@ def main():
 
         all_results.append(run_results)
 
+    # Perplexity Calculation
+    # ---------------------------------------------------------
+    model_instance = get_model_instance()
+    if model_instance and hasattr(model_instance, 'total_accepted_nll') and hasattr(model_instance, 'total_accepted_tokens'):
+        if model_instance.total_accepted_tokens > 0:
+            perplexity = math.exp(model_instance.total_accepted_nll / model_instance.total_accepted_tokens)
+            # This is a global perplexity, so add it to the top-level of the results
+            for run_results in all_results:
+                run_results['perplexity'] = perplexity
+        else:
+            perplexity = 0
+
     # ---------------------------------------------------------
     # Reporting
     # ---------------------------------------------------------
